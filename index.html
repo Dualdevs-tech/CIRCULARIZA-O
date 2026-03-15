@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SGB | CARTA DE CIRCULARIZAÇÃO</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <style>
+        :root { --shv-brand: #d33100; --shv-black: #0d0d0d; }
+        #login-overlay { position: fixed; inset: 0; background: var(--shv-black); z-index: 9999; display: flex; align-items: center; justify-content: center; padding: 20px; }
+        .login-card { background: white; padding: 2.5rem; border-radius: 3rem; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5); width: 100%; max-width: 420px; text-align: center; }
+        .sgb-logo-box { background-color: var(--shv-brand); color: white; display: inline-block; padding: 12px 35px; border-radius: 18px; font-size: 3rem; font-weight: 900; font-style: italic; line-height: 1; margin-bottom: 1.5rem; }
+        .input-label { display: block; text-align: left; font-size: 10px; font-weight: 800; color: #94a3b8; text-transform: uppercase; margin-bottom: 4px; }
+        .input-group { margin-bottom: 1.5rem; border-bottom: 1px solid #e2e8f0; }
+        .custom-input { width: 100%; padding: 10px 5px; border: none; background: transparent; font-size: 18px; color: #475569; outline: none; }
+        .btn-entrar { background-color: black; color: white; width: 100%; padding: 18px; border-radius: 20px; font-weight: 900; text-transform: uppercase; font-size: 14px; margin-top: 1rem; transition: all 0.2s; }
+        .status-badge { @apply px-2 py-1 rounded-full text-[10px] font-bold uppercase; }
+        #sig-canvas { touch-action: none; cursor: crosshair; width: 100%; height: 160px; background: #ffffff; border: 2px dashed #cbd5e1; border-radius: 0.75rem; }
+        .bg-shv-brand { background-color: var(--shv-brand); }
+        .text-shv-brand { color: var(--shv-brand); }
+    </style>
+</head>
+<body class="bg-slate-50 font-sans text-slate-800">
+
+    <div id="login-overlay">
+        <div class="login-card">
+            <div class="sgb-logo-box">SGB</div>
+            <h2 class="text-[#1e293b] font-black text-xl uppercase tracking-tighter mb-1">Carta de Circularização</h2>
+            <div class="w-12 h-1 bg-[#d33100] mx-auto mb-10 rounded-full"></div>
+            <div class="space-y-4">
+                <div class="text-left"><span class="input-label">Identificação (CNPJ)</span><div class="input-group"><input type="text" id="user-login" placeholder="Apenas números" class="custom-input"></div></div>
+                <div class="text-left"><span class="input-label">Senha</span><div class="input-group"><input type="password" id="pass-login" placeholder="••••••••" class="custom-input"></div></div>
+                <label class="flex items-start gap-2 cursor-pointer px-1 text-left">
+                    <input type="checkbox" id="lgpd-check" class="mt-1 accent-[#d33100]">
+                    <span class="text-[9px] text-slate-400 font-bold leading-tight uppercase">Aceito os termos da LGPD.</span>
+                </label>
+                <button onclick="handleLogin()" class="btn-entrar">Entrar no Sistema</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="app-content" class="hidden">
+        <header class="bg-black text-white p-5 border-b-4 border-shv-brand sticky top-0 z-40">
+            <div class="container mx-auto flex justify-between items-center">
+                <div>
+                    <h1 class="text-xl font-black uppercase italic">Gestão <span class="text-shv-brand">SGB</span></h1>
+                    <p id="header-user-name" class="text-[10px] font-bold text-slate-400 uppercase tracking-widest"></p>
+                </div>
+                <button onclick="logout()" class="px-4 py-2 bg-shv-brand hover:bg-orange-700 rounded-lg font-bold text-[10px] transition-all">SAIR</button>
+            </div>
+        </header>
+
+        <main class="container mx-auto py-8 px-4">
+            <section id="admin-section" class="hidden space-y-6">
+                <div class="flex justify-between items-center bg-white p-4 rounded-2xl shadow-sm border">
+                    <h2 class="font-black uppercase text-xs">Painel Administrativo</h2>
+                    <label class="bg-black text-white px-6 py-3 rounded-xl font-bold text-xs uppercase cursor-pointer">
+                        Importar Excel
+                        <input type="file" class="hidden" accept=".xlsx, .xls" onchange="importarExcel(this)">
+                    </label>
+                </div>
+                <div class="bg-white rounded-2xl shadow-xl overflow-x-auto border">
+                    <table class="w-full text-left">
+                        <thead class="bg-slate-900 text-white text-[10px] font-bold uppercase">
+                            <tr>
+                                <th class="p-4">Empresa / CNPJ</th>
+                                <th class="p-4 text-center">Status</th>
+                                <th class="p-4 text-right">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="admin-table-body" class="divide-y text-xs"></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <section id="user-section" class="hidden space-y-6">
+                <h2 class="font-black uppercase text-sm border-l-4 border-shv-brand pl-2">Minhas Conferências</h2>
+                <div id="user-cards-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
+            </section>
+        </main>
+    </div>
+
+    <script>
+        // Inicialização segura dos dados
+        let db = JSON.parse(localStorage.getItem('sgb_db_final')) || [];
+        let users = JSON.parse(localStorage.getItem('sgb_users_final')) || [{ cnpj: 'shv', nome: 'Administrador Geral', pass: 'shv', role: 'admin' }];
+
+        function saveData() {
+            localStorage.setItem('sgb_db_final', JSON.stringify(db));
+            localStorage.setItem('sgb_users_final', JSON.stringify(users));
+        }
+
+        function handleLogin() {
+            const raw = document.getElementById('user-login').value.trim();
+            const u = raw === 'shv' ? 'shv' : raw.replace(/\D/g, "");
+            const p = document.getElementById('pass-login').value.trim();
+            
+            if(!document.getElementById('lgpd-check').checked) return alert("Aceite a LGPD.");
+            
+            const user = users.find(x => x.cnpj === u && x.pass === p);
+            if(user) {
+                sessionStorage.setItem('logged_user', JSON.stringify(user));
+                initApp();
+            } else {
+                alert("Dados incorretos.");
+            }
+        }
+
+        function initApp() {
+            const user = JSON.parse(sessionStorage.getItem('logged_user'));
+            if(!user) return;
+            document.getElementById('login-overlay').style.display = 'none';
+            document.getElementById('app-content').classList.remove('hidden');
+            document.getElementById('header-user-name').innerText = user.nome;
+
+            if(user.role === 'admin') {
+                renderAdminTable();
+                document.getElementById('admin-section').classList.remove('hidden');
+            } else {
+                renderUserSection(user.cnpj);
+                document.getElementById('user-section').classList.remove('hidden');
+            }
+        }
+
+        function importarExcel(input) {
+            if (!input.files[0]) return;
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const rows = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { defval: "" });
+
+                    rows.forEach(row => {
+                        const cnpjLimpo = String(row.CNPJ || "").replace(/\D/g, "");
+                        const nomeEmpresa = row.NOME || row.CLIENTE || "Sem Nome";
+
+                        if (!cnpjLimpo) return;
+
+                        if(!users.find(u => u.cnpj === cnpjLimpo)) {
+                            users.push({ cnpj: cnpjLimpo, nome: nomeEmpresa, pass: cnpjLimpo.slice(0,4), role: 'user' });
+                        }
+
+                        db.push({
+                            id: Date.now() + Math.random(),
+                            terceiro: nomeEmpresa,
+                            cnpj: cnpjLimpo,
+                            dataRaw: new Date().toISOString().slice(0, 7),
+                            p13: row.P13 || 0, 
+                            p20: row.P20 || 0, 
+                            p45: row.P45 || 0, 
+                            granel: row.GRANEL || row.KG || 0,
+                            status: 'Pendente'
+                        });
+                    });
+                    saveData(); renderAdminTable(); alert("Sucesso!");
+                } catch (err) { alert("Erro ao ler arquivo."); }
+            };
+            reader.readAsArrayBuffer(input.files[0]);
+        }
+
+        function renderAdminTable() {
+            const body = document.getElementById('admin-table-body');
+            body.innerHTML = db.map(i => `
+                <tr class="hover:bg-slate-50">
+                    <td class="p-4"><b>${i.terceiro || 'N/A'}</b><br><span class="text-[10px] font-mono">${i.cnpj || ''}</span></td>
+                    <td class="p-4 text-center"><span class="status-badge ${i.status === 'Assinado' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}">${i.status || 'Pendente'}</span></td>
+                    <td class="p-4 text-right">
+                        <button onclick="deleteRecord(${i.id})" class="text-red-500 font-bold uppercase text-[9px]">Excluir</button>
+                    </td>
+                </tr>`).join('');
+        }
+
+        function renderUserSection(cnpj) {
+            const container = document.getElementById('user-cards-container');
+            const items = db.filter(i => i.cnpj === cnpj);
+            
+            if(items.length === 0) {
+                container.innerHTML = `<p class="text-slate-400 text-xs italic">Nenhuma conferência disponível.</p>`;
+                return;
+            }
+
+            container.innerHTML = items.map(i => `
+                <div class="bg-white p-6 rounded-3xl shadow-lg border-t-4 border-shv-brand">
+                    <p class="font-black text-[10px] text-slate-400 mb-4 uppercase">REF: ${i.dataRaw || ''}</p>
+                    <div class="grid grid-cols-2 gap-2 text-xs font-bold mb-4">
+                        <div class="bg-slate-50 p-2 rounded">P13: ${i.p13 || 0}</div>
+                        <div class="bg-slate-50 p-2 rounded">P20: ${i.p20 || 0}</div>
+                        <div class="bg-slate-50 p-2 rounded">P45: ${i.p45 || 0}</div>
+                        <div class="bg-orange-50 p-2 rounded text-shv-brand">KG: ${i.granel || 0}</div>
+                    </div>
+                    <button class="w-full bg-black text-white py-3 rounded-xl font-black uppercase text-[10px]">Confirmar Saldo</button>
+                </div>`).join('');
+        }
+
+        function deleteRecord(id) { if(confirm("Remover?")) { db = db.filter(x => x.id !== id); saveData(); renderAdminTable(); } }
+        function logout() { sessionStorage.clear(); location.reload(); }
+        window.onload = initApp;
+    </script>
+</body>
+</html>
